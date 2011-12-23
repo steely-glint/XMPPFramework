@@ -1093,8 +1093,7 @@ static void MarkDeath(void *xmlPtr, DDXMLNode *wrapper);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark XPath/XQuery
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-- (NSArray *)nodesForXPath:(NSString *)xpath error:(NSError **)error
+- (NSArray *)nodesForXPathWithNamespaces:(NSString *)xpath namespaces:(NSDictionary *)namespaces error:(NSError **)error
 {
 #if DDXML_DEBUG_MEMORY_ISSUES
 	DDXMLNotZombieAssert();
@@ -1131,16 +1130,28 @@ static void MarkDeath(void *xmlPtr, DDXMLNode *wrapper);
 	xpathCtx->node = (xmlNodePtr)genericPtr;
 		
 	xmlNodePtr rootNode = (doc)->children;
-	if(rootNode != NULL)
-	{
-		xmlNsPtr ns = rootNode->nsDef;
-		while(ns != NULL)
-		{
-			xmlXPathRegisterNs(xpathCtx, ns->prefix, ns->href);
-			
-			ns = ns->next;
-		}
-	}
+    if (namespaces != nil) {
+        NSEnumerator *ks = [namespaces keyEnumerator];
+        NSString *k = nil;
+        while (nil != (k = (NSString *) [ks nextObject])){
+            xmlChar *uri = (xmlChar *) [[namespaces objectForKey:k] cStringUsingEncoding:NSUTF8StringEncoding];
+            xmlChar *pref = (xmlChar *) [k cStringUsingEncoding:NSUTF8StringEncoding];
+            xmlXPathRegisterNs(xpathCtx, pref, uri);
+        }
+    }
+    else 
+    {
+        if(rootNode != NULL)
+        {
+            xmlNsPtr ns = rootNode->nsDef;
+            while(ns != NULL)
+            {
+                xmlXPathRegisterNs(xpathCtx, ns->prefix, ns->href);
+                
+                ns = ns->next;
+            }
+        } 
+    }
 	
 	xpathObj = xmlXPathEvalExpression([xpath xmlChar], xpathCtx);
 	
@@ -1191,6 +1202,10 @@ static void MarkDeath(void *xmlPtr, DDXMLNode *wrapper);
 	
 	return result;
 }
+- (NSArray *)nodesForXPath:(NSString *)xpath error:(NSError **)error {
+    return [self nodesForXPathWithNamespaces:xpath namespaces:nil error:error];
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark Private API

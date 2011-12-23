@@ -133,6 +133,8 @@ enum {
 #pragma mark --- XPath/XQuery ---
 
 - (NSArray *)nodesForXPath:(NSString *)xpath error:(NSError **)error;
+- (NSArray *)nodesForXPathWithNamespaces:(NSString *)xpath namespaces:(NSDictionary *)namespaces error:(NSError **)error;
+
 //- (NSArray *)objectsForXQuery:(NSString *)xquery constants:(NSDictionary *)constants error:(NSError **)error;
 //- (NSArray *)objectsForXQuery:(NSString *)xquery error:(NSError **)error;
 
