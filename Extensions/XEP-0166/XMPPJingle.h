@@ -13,10 +13,11 @@
 {
     XMPPJID *me;
     NSMutableDictionary *namespaces;
+    NSMutableDictionary *unAcked;
     NSString *payloadAttrFilter;
     BOOL phonoBugs;
 }
-@property (nonatomic, readonly) XMPPJID *me;
+@property (copy, readwrite) XMPPJID *me;
 @property (copy, readwrite) NSString *payloadAttrFilter;
 
 - (id)initWithPhono:(BOOL)phonoBugs;
@@ -24,11 +25,19 @@
 - (NSString *) ipWithCandidate:(NSXMLElement *) candidate;
 - (NSString *) portWithCandidate:(NSXMLElement *) candidate;
 - (void) sendSessionAccept:(NSString *)sid to:(NSString *)tos host:(NSString *)host port:(NSString *)port payload:(NSXMLElement*)payload;
+-(void) sendHangup:(NSString *) sid 
+                to:(NSString *) tos reason:(NSString *)reason;
 
 @end
 
 @protocol XMPPJingleDelegate <NSObject>
 - (void)xmppJingle:(XMPPJingle *)sender didReceiveIncommingAudioCall:(NSString *)sid from:(XMPPJID *)from to:(XMPPJID *)to transport:(NSXMLElement *)candidate sdp:(NSXMLElement *)payload ;
+- (void)xmppJingle:(XMPPJingle *)sender
+  didReceiveResult:(NSString *)sid ;
+- (void)xmppJingle:(XMPPJingle *)sender
+   didReceiveError:(NSString *)sid error:(NSXMLElement*)error;
+- (void)xmppJingle:(XMPPJingle *)sender
+   didReceiveTerminate:(NSString *)sid reason:(NSString*)reason;
 
 
 @optional

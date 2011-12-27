@@ -31,6 +31,7 @@
     [namespaces setObject:NS_JINGLE_RTP forKey:@"rtp"];
     [namespaces setObject:NS_JINGLE_UDP forKey:@"udp"];
     [namespaces setObject:NS_JABBER forKey:@"jabber"];
+    unAcked = [[NSMutableDictionary alloc] init];
     phonoBugs = tphonoBugs;
 
 	return self;
@@ -72,6 +73,23 @@
 - (NSString *) portWithCandidate:(NSXMLElement *)candidate{
     return [candidate attributeStringValueForName:@"port"];
 }
+
+
+- (NSString *) mkIdElement{
+    NSDate *now = [NSDate date];
+    NSTimeInterval fpnow = [now timeIntervalSince1970];
+    NSString *ret = [[[NSString alloc] initWithFormat:@"%10.4f", fpnow] autorelease];
+    return ret;
+}
+
+- (NSString *) mkSidElement{
+    NSDate *now = [NSDate date];
+    NSTimeInterval fpnow = [now timeIntervalSince1970];
+    NSString *ret = [[[NSString alloc] initWithFormat:@"%a", fpnow] autorelease];
+    return ret;
+}
+
+
 - (XMPPIQ *) sendResultAck:(XMPPIQ *) iq{
     /*<iq from='juliet@capulet.lit/balcony'
      id='xs51r0k4'
@@ -98,6 +116,8 @@
 - (NSXMLElement *) jingleBodyWithAction:(NSString *) act sid:(NSString *) sid {
     NSXMLElement * body = [[NSXMLElement alloc] initWithName:@"jingle" xmlns:NS_JINGLE  ];
     [body addAttributeWithName:@"sid" stringValue:sid];
+    [body addAttributeWithName:@"action" stringValue:act];
+
     return body;
 }
 
@@ -141,7 +161,7 @@
     return ca;
 }
 
-- (void) sendSessionAccept:(NSString *)sid to:(NSString *)tos host:(NSString *)host port:(NSString *)port payload:(NSXMLElement*)payload{
+- (void) sendSessionAccept:(NSString *)sid to:(NSString *)tos host:(NSString *)host port:(NSString *)port payload:(NSXMLElement*)payload {
     NSString *template = @"<jingle xmlns=\"urn:xmpp:jingle:1\" action=\"session-accept\" initiator=\"\" sid=\"\">\
        <content creator=\"initiator\">\
         <description xmlns=\"urn:xmpp:jingle:apps:rtp:1\">\
@@ -155,15 +175,10 @@
 
     NSError *error;
     NSXMLElement * body =[[NSXMLElement alloc] initWithXMLString:template error:&error ];
-
-
     
     XMPPJID *to = [XMPPJID jidWithString:tos];
-    NSString *elementID =@"123456"; // FIX FIX FIX
+    NSString *elementID =[self mkIdElement];
     XMPPIQ *iq = [XMPPIQ iqWithType:@"set" to:to  elementID:elementID child:body];
-
-    NSLog(@" before -> %@",[iq XMLString]);
-    // now find and set some stuff
 
     [self xp0sa:iq q:@"/iq/jingle:jingle/@initiator" value:initiator];
     [self xp0sa:iq q:@"/iq/jingle:jingle/@sid" value:sid];
@@ -173,8 +188,62 @@
 
     
     NSLog(@" Send -> %@",[iq XMLString]);
-    
+    [unAcked setObject:sid forKey:elementID];
     [xmppStream sendElement:iq]; 
+}
+
+-(void) sendHangup:(NSString *) sid to:(NSString *)tos reason:(NSString *)reason{
+    /* 
+<iq xmlns="jabber:client" type="set" to="timpanton\40sip2sip.info@sip" id="3166:sendIQ">
+     <jingle xmlns="urn:xmpp:jingle:1" action="session-terminate" initiator="timpanton@sip2sip.info" sid="75eb2be3-5f82-4790-a6df-31ac4f1f9a10"/></iq>
+<iq xmlns="jabber:client" type="set" to="timpanton\40sip2sip.info@sip" id="1324999727.9577">
+     <jingle xmlns="urn:xmpp:jingle:1" sid="33fbd5cc-e4a0-4c9d-b6ba-5080086e9b51" initiator="timpanton@sip2sip.info"></jingle></iq>
+     */
+    NSXMLElement * body = [self jingleBodyWithAction:@"session-terminate" sid:sid];
+    [body addAttributeWithName:@"initiator" stringValue:@"timpanton@sip2sip.info"]; // FIX FIX FIX
+
+    NSXMLElement *xr = [NSXMLElement elementWithName:@"reason" xmlns:NS_JINGLE];
+    NSXMLElement *xrb = [NSXMLElement elementWithName:reason xmlns:NS_JINGLE];
+    [xr addChild:xrb];
+    [body addChild:xr];
+    XMPPJID *to = [XMPPJID jidWithString:tos];
+    NSString *elementID =[self mkIdElement];
+    XMPPIQ *iq = [XMPPIQ iqWithType:@"set" to:to  elementID:elementID child:body];
+    [iq setXmlns:NS_JABBER];
+    NSLog(@" Send -> %@",[iq XMLString]);
+    [unAcked setObject:sid forKey:elementID];
+    [xmppStream sendElement:iq]; 
+}
+
+
+- (XMPPIQ *) didRecvSessionTerminate:(XMPPStream *)sender iq:(XMPPIQ *)iq {
+    XMPPIQ * ret = nil;
+    NSLog(@" got -> %@",[iq XMLString]);
+    /* <iq from='juliet@capulet.lit/balcony'
+     id='bv81gs75'
+     to='romeo@montague.lit/orchard'
+     type='set'>
+     <jingle xmlns='urn:xmpp:jingle:1'
+     action='session-terminate'
+     sid='a73sjjvkla37jfea'>
+     <reason>
+     <success/>
+     </reason>
+     </jingle>
+     </iq> 
+     */
+    NSXMLElement *sid = [self xp0:iq q:@"/jabber:iq/jingle:jingle[@action=\"session-terminate\"]/@sid"];
+    NSXMLElement *reasonz = [self xp0:iq q:@"/jabber:iq/jingle:jingle/reason/*"]; // PHONO NAMESPACE bug here.
+    if (sid != nil){
+        NSString *ssid =[sid stringValue];
+        NSString *sreason = @"";
+        if  (reasonz != nil){
+            sreason =[reasonz name];
+        }
+        [multicastDelegate xmppJingle:self didReceiveTerminate:ssid reason:sreason ];
+        ret = [self sendResultAck:iq];
+    }
+    return ret;
 }
 
 
@@ -281,12 +350,28 @@
             if ([action compare:@"session-initiate"] == NSOrderedSame ){
                 rep = [self didRecvSessionInitiate:sender iq:iq];
             }
+            if ([action compare:@"session-terminate"] == NSOrderedSame ){
+                rep = [self didRecvSessionTerminate:sender iq:iq];
+            }
             // say what we have to say....
             if (rep != nil) {
                 [sender sendElement:rep];
             }
         }
-	}
+	} else if ([iq isResultIQ]){
+        NSString * sid = [unAcked objectForKey:[iq elementID]];
+        if (sid != nil){
+            [multicastDelegate xmppJingle:self didReceiveResult:sid];
+            [unAcked removeObjectForKey:[iq elementID]];
+        }
+    } else if ([iq isErrorIQ]){
+        NSString * sid = [unAcked objectForKey:[iq elementID]];
+        if (sid != nil){
+            NSXMLElement *err = [iq elementForName:@"error"];
+            [multicastDelegate xmppJingle:self didReceiveError:sid error:err];
+            [unAcked removeObjectForKey:[iq elementID]];
+        }
+    }
 	return (rep != nil);
 }
 @end
