@@ -424,16 +424,6 @@
  **/
 - (BOOL)xmppStream:(XMPPStream *)sender didReceiveIQ:(XMPPIQ *)iq
 {
-    /*
-     <iq from='juliet@capulet.lit/balcony'
-     id='jd82f517'
-     to='romeo@montague.lit/orchard'
-     type='set'>
-     <jingle xmlns='urn:xmpp:jingle:1'
-     action='session-accept'
-     responder='juliet@capulet.lit/balcony'
-     sid='a73sjjvkla37jfea'/> 
-     */
     XMPPIQ *rep = nil;
     if ([iq isSetIQ]){
         NSString *to = [iq toStr];
