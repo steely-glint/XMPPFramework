@@ -27,6 +27,9 @@
 - (void) sendSessionAccept:(NSString *)sid to:(NSString *)tos host:(NSString *)host port:(NSString *)port payload:(NSXMLElement*)payload;
 -(void) sendHangup:(NSString *) sid 
                 to:(NSString *) tos reason:(NSString *)reason;
+-(NSXMLElement *)emptyAudioPayload;
+-(void) addCodecToPayload:(NSXMLElement *)allAudioCodecs name:(NSString *)name rate:(NSString *)rate ptype:(NSString *)ptype;
+-(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs;
 
 @end
 
@@ -38,7 +41,7 @@
    didReceiveError:(NSString *)sid error:(NSXMLElement*)error;
 - (void)xmppJingle:(XMPPJingle *)sender
    didReceiveTerminate:(NSString *)sid reason:(NSString*)reason;
-
+- (void)xmppJingle:(XMPPJingle *)sender didReceiveAcceptForCall:(NSString *)sid from:(XMPPJID *)from to:(XMPPJID *)to transport:(NSXMLElement *)candidate sdp:(NSXMLElement *)payload ;
 
 @optional
 

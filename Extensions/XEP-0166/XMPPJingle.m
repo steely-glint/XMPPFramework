@@ -152,8 +152,24 @@
     [a setStringValue:val];
 }
 
+-(NSXMLElement *)emptyAudioPayload{
+    NSXMLElement * descript =[[NSXMLElement alloc]  initWithName:@"description" xmlns:NS_JINGLE_RTP];
+    [descript addAttributeWithName:@"media" stringValue:@"audio"];
+    return descript;
+}
+
+-(void) addCodecToPayload:(NSXMLElement *)all name:(NSString *)name rate:(NSString *)rate ptype:(NSString *)ptype{
+    NSXMLElement *pa = [NSXMLElement elementWithName:@"payload-type"];
+    [pa setXmlns:NS_JINGLE_RTP];
+    [pa addAttributeWithName:@"id" stringValue:ptype ];
+    [pa addAttributeWithName:@"name" stringValue:name ];
+    [pa addAttributeWithName:@"clockrate" stringValue:rate];
+    [all addChild:pa];
+}
+
 - (NSXMLElement *) mkCandidate:(NSString *)host port:(NSString*)port gen:(NSString *)gen comp:(NSString *)comp {
     NSXMLElement *ca = [NSXMLElement elementWithName:@"candidate"];
+    [ca setXmlns:NS_JINGLE_UDP];
     [ca addAttributeWithName:@"ip" stringValue:host ];
     [ca addAttributeWithName:@"port" stringValue:port ];
     [ca addAttributeWithName:@"generation" stringValue:@"0"];
@@ -161,10 +177,58 @@
     return ca;
 }
 
+
+-(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs;{
+    NSString *sid = [self mkSidElement];
+    
+    NSString *template = @"<jingle xmlns='urn:xmpp:jingle:1' \
+    action='session-initiate' \
+    initiator='' \
+    sid=''> \
+    <content creator='initiator' name='voice'>\
+     <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'>\
+     <payload-type id='101' name='telephone-event' clockrate='8000'/>\
+     </description>\
+     <transport xmlns='urn:xmpp:jingle:transports:raw-udp:1'> \
+     </transport> \
+    </content> \
+    </jingle>";
+    NSError *error;
+    NSString *initiator = [me full]; 
+    
+    NSXMLElement * body =[[NSXMLElement alloc] initWithXMLString:template error:&error ];
+    
+    XMPPJID *to = [XMPPJID jidWithString:tos];
+    NSString *elementID =[self mkIdElement];
+    XMPPIQ *iq = [XMPPIQ iqWithType:@"set" to:to  elementID:elementID child:body];
+    [iq setXmlns:NS_JABBER];
+    [self xp0sa:iq q:@"/jabber:iq/jingle:jingle/@initiator" value:initiator];
+    [self xp0sa:iq q:@"/jabber:iq/jingle:jingle/@sid" value:sid];
+    NSXMLElement *desc = [self xp0:iq q:@"/jabber:iq/jingle:jingle/jingle:content/rtp:description"] ;
+    NSArray * payloads = [self xpns:codecs q:[NSString stringWithFormat:@"rtp:payload-type%@", payloadAttrFilter]];
+    if ((payloads != nil) && ([payloads count] > 0)) {
+        for (int i=0; i<[payloads count]; i++){
+            NSXMLElement * pay = [[payloads objectAtIndex:i] copy];
+            [pay detach];
+            NSLog(@"adding payload -> %@",[pay XMLString]);
+            [desc addChild:pay];
+        }
+    } else {
+        NSLog(@"error - no matching payloads for %@ in %@" ,payloadAttrFilter,[codecs XMLString]);
+    }
+    [[self xp0:iq q:@"/jabber:iq/jingle:jingle/jingle:content/udp:transport"] 
+     addChild:[self mkCandidate:host port:port gen:@"0" comp:@"1"]];
+    NSLog(@" Send -> %@",[iq XMLString]);
+    [unAcked setObject:sid forKey:elementID];
+    [xmppStream sendElement:iq]; 
+    return sid;
+}
+
+
 - (void) sendSessionAccept:(NSString *)sid to:(NSString *)tos host:(NSString *)host port:(NSString *)port payload:(NSXMLElement*)payload {
     NSString *template = @"<jingle xmlns=\"urn:xmpp:jingle:1\" action=\"session-accept\" initiator=\"\" sid=\"\">\
        <content creator=\"initiator\">\
-        <description xmlns=\"urn:xmpp:jingle:apps:rtp:1\">\
+        <description xmlns=\"urn:xmpp:jingle:apps:rtp:1\" media=\"audio\">\
          <payload-type id=\"101\" name=\"telephone-event\" clockrate=\"8000\"/>\
         </description>\
         <transport xmlns=\"urn:xmpp:jingle:transports:raw-udp:1\">\
@@ -245,7 +309,38 @@
     }
     return ret;
 }
+- (XMPPIQ *) didRecvSessionAccept:(XMPPStream *)sender iq:(XMPPIQ *)iq {
+    XMPPIQ * ret = nil;
+    NSLog(@" got -> %@",[iq XMLString]);
+    
+    
+    NSXMLElement *sid = [self xp0:iq q:@"jingle:jingle[@action=\"session-accept\"]/@sid"];
+    NSXMLElement *candidate = [self xp0:iq q:@"jingle:jingle[@action=\"session-accept\"]/pjingle:content/udp:transport/pudp:candidate"];
+    NSString *xpath = [NSString stringWithFormat:@"jingle:jingle[@action=\"session-accept\"]/pjingle:content/rtp:description[@media=\"audio\"]/prtp:payload-type%@", payloadAttrFilter];
+    
+    NSXMLElement * payload = [self xp0:iq q:xpath];
+      
+    
+    if ((sid != nil) && (payload != nil) && (candidate != nil)){
+        // say we will think about it.
+        ret = [self sendResultAck:iq];
+        // and tell the user:
+        NSString *ssid =[sid stringValue];
+        XMPPJID *sfrom = [iq from];
+        XMPPJID *sto = [iq to];
+        
+        [multicastDelegate xmppJingle:self didReceiveAcceptForCall:ssid from:sfrom to:sto transport:candidate sdp:payload ];
+        
+    } else {
+        // nothing we can understand...
+        ret = [self sendResultError:iq because:SERVICEUNAVAIL];
+    }
+    
+    
+    return ret;
 
+    
+}
 
 - (XMPPIQ *) didRecvSessionInitiate:(XMPPStream *)sender iq:(XMPPIQ *)iq {
     XMPPIQ * ret = nil;
@@ -352,6 +447,9 @@
             }
             if ([action compare:@"session-terminate"] == NSOrderedSame ){
                 rep = [self didRecvSessionTerminate:sender iq:iq];
+            }
+            if ([action compare:@"session-accept"] == NSOrderedSame ){
+                rep = [self didRecvSessionAccept:sender iq:iq];
             }
             // say what we have to say....
             if (rep != nil) {
