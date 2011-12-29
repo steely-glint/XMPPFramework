@@ -42,6 +42,7 @@
 - (void)xmppJingle:(XMPPJingle *)sender
    didReceiveTerminate:(NSString *)sid reason:(NSString*)reason;
 - (void)xmppJingle:(XMPPJingle *)sender didReceiveAcceptForCall:(NSString *)sid from:(XMPPJID *)from to:(XMPPJID *)to transport:(NSXMLElement *)candidate sdp:(NSXMLElement *)payload ;
+- (void)xmppJingle:(XMPPJingle *)sender didReceiveInfoForCall:(NSString *)sid from:(XMPPJID *)from to:(XMPPJID *)to info:(NSXMLNode *)info;
 
 @optional
 

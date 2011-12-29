@@ -341,6 +341,32 @@
 
     
 }
+- (XMPPIQ *) didRecvSessionInfo:(XMPPStream *)sender iq:(XMPPIQ *)iq {
+
+/*
+ <iq xmlns="jabber:client" type="set" from="timpanton\40sip2sip.info@sip" to="6890ca2e-ae2a-46c7-9aea-93e3e1cc926b@phono.com/voxeo" id="adcae3c6-2f53-4eea-b610-4b0addcb0c94"><jingle xmlns="urn:xmpp:jingle:1" action="session-info" initiator="6890ca2e-ae2a-46c7-9aea-93e3e1cc926b@ec2-50-19-77-101.compute-1.amazonaws.com/voxeo" sid="0x1.3bf18cad13cp+30"><ringing xmlns="urn:xmpp:jingle:apps:rtp:1:info"></ringing></jingle></iq>
+ */
+    XMPPIQ * ret = nil;
+    NSLog(@" got -> %@",[iq XMLString]);
+    
+    
+    NSXMLElement *sid = [self xp0:iq q:@"jingle:jingle[@action=\"session-info\"]/@sid"];
+    NSXMLNode *info = [iq childAtIndex:0];
+    
+    
+    if ((sid != nil) && (info != nil) ){
+        // say we will we got that.
+        ret = [self sendResultAck:iq];
+        // and tell the user:
+        NSString *ssid =[sid stringValue];
+        XMPPJID *sfrom = [iq from];
+        XMPPJID *sto = [iq to];
+        
+        [multicastDelegate xmppJingle:self didReceiveInfoForCall:ssid from:sfrom to:sto info:info ];
+        
+    }     
+    return ret;
+}
 
 - (XMPPIQ *) didRecvSessionInitiate:(XMPPStream *)sender iq:(XMPPIQ *)iq {
     XMPPIQ * ret = nil;
@@ -442,6 +468,9 @@
             }
             if ([action compare:@"session-accept"] == NSOrderedSame ){
                 rep = [self didRecvSessionAccept:sender iq:iq];
+            }
+            if ([action compare:@"session-info"] == NSOrderedSame ){
+                rep = [self didRecvSessionInfo:sender iq:iq];
             }
             // say what we have to say....
             if (rep != nil) {
