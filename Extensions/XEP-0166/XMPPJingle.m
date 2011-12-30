@@ -178,9 +178,9 @@
 }
 
 
--(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs;{
+-(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs custom:(NSArray*)misc;{
     NSString *sid = [self mkSidElement];
-    
+
     NSString *template = @"<jingle xmlns='urn:xmpp:jingle:1' \
     action='session-initiate' \
     initiator='' \
@@ -197,6 +197,11 @@
     NSString *initiator = [me full]; 
     
     NSXMLElement * body =[[NSXMLElement alloc] initWithXMLString:template error:&error ];
+    if(misc != nil){
+        for(int i=0; i<[misc count];i++){
+            [body addChild:[misc objectAtIndex:i]];
+        }
+    }
     
     XMPPJID *to = [XMPPJID jidWithString:tos];
     NSString *elementID =[self mkIdElement];

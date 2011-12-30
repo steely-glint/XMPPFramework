@@ -29,8 +29,7 @@
                 to:(NSString *) tos reason:(NSString *)reason;
 -(NSXMLElement *)emptyAudioPayload;
 -(void) addCodecToPayload:(NSXMLElement *)allAudioCodecs name:(NSString *)name rate:(NSString *)rate ptype:(NSString *)ptype;
--(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs;
-
+-(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs  custom:(NSArray*)misc ;
 @end
 
 @protocol XMPPJingleDelegate <NSObject>
