@@ -17,7 +17,7 @@
 #define SERVICEUNAVAIL     @"<error type='cancel'><service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>"
 
 @implementation XMPPJingle
-@synthesize me, payloadAttrFilter ;
+@synthesize me, payloadAttrFilter, rtt;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark -
@@ -74,6 +74,13 @@
     return [candidate attributeStringValueForName:@"port"];
 }
 
+- (void) calculateRTT:(NSString *)thenS{
+    NSTimeInterval then = [thenS doubleValue]; 
+    NSDate *now = [NSDate date];
+    NSTimeInterval fpnow = [now timeIntervalSince1970];
+    rtt = fpnow - then;
+    NSLog(@"RTT is %g",rtt);
+}
 
 - (NSString *) mkIdElement{
     NSDate *now = [NSDate date];
@@ -483,6 +490,7 @@
             }
         }
 	} else if ([iq isResultIQ]){
+        [self calculateRTT:[iq elementID]];
         NSString * sid = [unAcked objectForKey:[iq elementID]];
         if (sid != nil){
             [multicastDelegate xmppJingle:self didReceiveResult:sid];
