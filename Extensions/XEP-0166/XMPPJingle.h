@@ -16,9 +16,7 @@
     NSMutableDictionary *unAcked;
     NSString *payloadAttrFilter;
     BOOL phonoBugs;
-    NSTimeInterval rtt;
 }
-@property (readonly) NSTimeInterval rtt;
 @property (copy, readwrite) XMPPJID *me;
 @property (copy, readwrite) NSString *payloadAttrFilter;
 - (NSString *) mkIdElement;
