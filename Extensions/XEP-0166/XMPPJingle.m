@@ -178,20 +178,43 @@
     return ca;
 }
 
+- (NSArray *) mkCryptoElems:(NSArray *)cryptoLines {
+    //      <crypto tag='1' crypto-suite='AES_CM_128_HMAC_SHA1_80' key-params=''/> 
+    int len = 0;
+    if ((cryptoLines != nil) && ([cryptoLines count] > 0)){
+        len = [cryptoLines count];
+    }
+    NSMutableArray *ret = [NSMutableArray arrayWithCapacity:len];
+    for (int i=0;i<len;i++){
+        NSXMLElement *cr = [NSXMLElement elementWithName:@"crypto"];
+        NSDictionary *cline = [cryptoLines objectAtIndex:i];
+        NSLog(@"making crypto element from tag=%d suite=%@ key-params=%@", (i+1) , [cline objectForKey:@"crypto-suite"],[cline objectForKey:@"key-params"] );
 
--(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs custom:(NSArray*)misc;{
+        [cr setXmlns:NS_JINGLE_RTP];
+        [cr addAttributeWithName:@"tag" stringValue:[NSString stringWithFormat:@"%d",i+1] ];
+        [cr addAttributeWithName:@"crypto-suite" stringValue:[cline objectForKey:@"crypto-suite"] ];
+        [cr addAttributeWithName:@"key-params" stringValue:[cline objectForKey:@"key-params"]];
+        [ret addObject:cr];
+    }
+    
+    return ret;
+}
+
+-(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs custom:(NSArray*)misc cryptoRequired:(NSInteger)cryptoRequired cryptoLines:(NSArray *)cryptoLines {
     NSString *sid = [self mkSidElement];
-
+    
     NSString *template = @"<jingle xmlns='urn:xmpp:jingle:1' \
     action='session-initiate' \
     initiator='' \
     sid=''> \
     <content creator='initiator' name='voice'>\
-     <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'>\
-     <payload-type id='101' name='telephone-event' clockrate='8000'/>\
-     </description>\
-     <transport xmlns='urn:xmpp:jingle:transports:raw-udp:1'> \
-     </transport> \
+    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'>\
+    <payload-type id='101' name='telephone-event' clockrate='8000'/>\
+    <encryption required='0'>\
+    </encryption> \
+    </description>\
+    <transport xmlns='urn:xmpp:jingle:transports:raw-udp:1'> \
+    </transport> \
     </content> \
     </jingle>";
     NSError *error;
@@ -210,6 +233,8 @@
     [iq setXmlns:NS_JABBER];
     [self xp0sa:iq q:@"/jabber:iq/jingle:jingle/@initiator" value:initiator];
     [self xp0sa:iq q:@"/jabber:iq/jingle:jingle/@sid" value:sid];
+
+    
     NSXMLElement *desc = [self xp0:iq q:@"/jabber:iq/jingle:jingle/jingle:content/rtp:description"] ;
     NSArray * payloads = [self xpns:codecs q:[NSString stringWithFormat:@"rtp:payload-type%@", payloadAttrFilter]];
     if ((payloads != nil) && ([payloads count] > 0)) {
@@ -224,6 +249,19 @@
     }
     [[self xp0:iq q:@"/jabber:iq/jingle:jingle/jingle:content/udp:transport"] 
      addChild:[self mkCandidate:host port:port gen:@"0" comp:@"1"]];
+    [self xp0sa:iq q:@"/jabber:iq/jingle:jingle/jingle:content/rtp:description/rtp:encryption/@required" value:[NSString stringWithFormat:@"%d",cryptoRequired]];
+    
+    NSXMLElement *encryption = [self xp0:iq q:@"/jabber:iq/jingle:jingle/jingle:content/rtp:description/rtp:encryption"];
+    NSArray * cels = [self mkCryptoElems:cryptoLines];
+    if ((cels != nil) && ([cels count] > 0)) {
+        for (int i=0; i<[cels count]; i++){
+            NSXMLElement * ce = [cels objectAtIndex:i];
+            NSLog(@"adding crypto -> %@",[ce XMLString]);
+            [encryption addChild:ce];
+        }
+    } else {
+        [desc removeChildAtIndex:[encryption index] ];
+    }
     NSLog(@" Send -> %@",[iq XMLString]);
     [unAcked setObject:sid forKey:elementID];
     [xmppStream sendElement:iq]; 
@@ -231,32 +269,42 @@
 }
 
 
-- (void) sendSessionAccept:(NSString *)sid to:(NSString *)tos host:(NSString *)host port:(NSString *)port payload:(NSXMLElement*)payload {
+- (void) sendSessionAccept:(NSString *)sid to:(NSString *)tos host:(NSString *)host port:(NSString *)port payload:(NSXMLElement*)payload cryptos:(NSArray *) cryptos {
     NSString *template = @"<jingle xmlns=\"urn:xmpp:jingle:1\" action=\"session-accept\" initiator=\"\" sid=\"\">\
-       <content creator=\"initiator\">\
-        <description xmlns=\"urn:xmpp:jingle:apps:rtp:1\" media=\"audio\">\
-         <payload-type id=\"101\" name=\"telephone-event\" clockrate=\"8000\"/>\
-        </description>\
-        <transport xmlns=\"urn:xmpp:jingle:transports:raw-udp:1\">\
-        </transport>\
-       </content>\
-      </jingle>";
+    <content creator=\"initiator\">\
+    <description xmlns=\"urn:xmpp:jingle:apps:rtp:1\" media=\"audio\">\
+    <encryption/>\
+    <payload-type id=\"101\" name=\"telephone-event\" clockrate=\"8000\"/>\
+    </description>\
+    <transport xmlns=\"urn:xmpp:jingle:transports:raw-udp:1\">\
+    </transport>\
+    </content>\
+    </jingle>";
     NSString *initiator = @"timpanton@sip2sip.info"; // FIX FIX FIX
-
+    
     NSError *error;
     NSXMLElement * body =[[NSXMLElement alloc] initWithXMLString:template error:&error ];
     
     XMPPJID *to = [XMPPJID jidWithString:tos];
     NSString *elementID =[self mkIdElement];
     XMPPIQ *iq = [XMPPIQ iqWithType:@"set" to:to  elementID:elementID child:body];
-
+    
     [self xp0sa:iq q:@"/iq/jingle:jingle/@initiator" value:initiator];
     [self xp0sa:iq q:@"/iq/jingle:jingle/@sid" value:sid];
-    [[self xp0:iq q:@"/iq/jingle:jingle/jingle:content/rtp:description"] addChild:payload];
+    NSXMLElement * desc = [self xp0:iq q:@"/iq/jingle:jingle/jingle:content/rtp:description"];
+    [desc addChild:payload];
     [[self xp0:iq q:@"/iq/jingle:jingle/jingle:content/udp:transport"] 
      addChild:[self mkCandidate:host port:port gen:@"0" comp:@"1"]];
-
-    
+    NSXMLElement * enc = [self xp0:iq q:@"/iq/jingle:jingle/jingle:content/rtp:description/rtp:encryption"];
+    if ((cryptos != nil) && ([cryptos count] > 0)){
+        NSArray *cels = [self mkCryptoElems:cryptos];
+        for(NSXMLElement *cel in cels){
+            NSLog(@"adding %@ to encryption element",[cel stringValue]);
+            [enc addChild:cel];
+        }
+    } else {
+        [desc removeChildAtIndex:[enc index]];  
+    }
     NSLog(@" Send -> %@",[iq XMLString]);
     [unAcked setObject:sid forKey:elementID];
     [xmppStream sendElement:iq]; 
@@ -324,6 +372,9 @@
     NSXMLElement *candidate = [self xp0:iq q:@"jingle:jingle[@action=\"session-accept\"]/pjingle:content/udp:transport/pudp:candidate"];
     NSString *xpath = [NSString stringWithFormat:@"jingle:jingle[@action=\"session-accept\"]/pjingle:content/rtp:description[@media=\"audio\"]/prtp:payload-type%@", payloadAttrFilter];
     
+    NSArray *cels = [self xpns:iq q:@"jingle:jingle[@action=\"session-accept\"]/pjingle:content/rtp:description[@media=\"audio\"]/prtp:encryption/prtp:crypto"];
+    NSXMLElement *creq = [self xp0:iq q:@"jingle:jingle[@action=\"session-accept\"]/pjingle:content/rtp:description[@media=\"audio\"]/prtp:encryption/@required]"];
+    
     NSXMLElement * payload = [self xp0:iq q:xpath];
       
     
@@ -332,10 +383,14 @@
         ret = [self sendResultAck:iq];
         // and tell the user:
         NSString *ssid =[sid stringValue];
+        NSString *creqI = [creq stringValue];
         XMPPJID *sfrom = [iq from];
         XMPPJID *sto = [iq to];
-        
-        [multicastDelegate xmppJingle:self didReceiveAcceptForCall:ssid from:sfrom to:sto transport:candidate sdp:payload ];
+        NSMutableArray * cla = [NSMutableArray arrayWithCapacity:[cels count]];
+        for (NSXMLElement *ce in cels){
+            [cla addObject:[ce attributesAsDictionary]];
+        }
+        [multicastDelegate xmppJingle:self didReceiveAcceptForCall:ssid from:sfrom to:sto transport:candidate sdp:payload cryptoRequired:creqI cryptoElements:cla];
         
     } else {
         // nothing we can understand...
@@ -396,6 +451,12 @@
          <payload-type xmlns="" id="116" name="SPEEX" clockrate="16000"/>
          <payload-type xmlns="" id="101" name="telephone-event" clockrate="8000"/>
          <payload-type xmlns="" id="115" name="SPEEX" clockrate="8000"/>
+         <encryption>
+           <crypto crypto-suite="AES_CM_128_HMAC_SHA1_80" key-params="inline:znX9Mr21swC7JMn54uQqWBtlm42DMz0LCu1Iabub" tag="1">
+           </crypto>
+           <crypto crypto-suite="AES_CM_128_HMAC_SHA1_32" key-params="inline:ifHPKYX9hV2rfZbS6C+dxNWr9aVwPhCxF817oCPz" tag="2">
+           </crypto>
+         </encryption>
         </description>
        </content>
       </jingle>
@@ -429,6 +490,9 @@
         }
     }       
     
+    NSArray *cels = [self xpns:iq q:@"jingle:jingle[@action=\"session-initiate\"]/pjingle:content/rtp:description[@media=\"audio\"]/prtp:encryption/prtp:crypto"];
+    NSXMLElement *creq = [self xp0:iq q:@"jingle:jingle[@action=\"session-accept\"]/pjingle:content/rtp:description[@media=\"audio\"]/prtp:encryption/@required]"];
+    
     if ((sid != nil) && (payload != nil) && (candidate != nil)){
         // say we will think about it.
         ret = [self sendResultAck:iq];
@@ -436,8 +500,13 @@
         NSString *ssid =[sid stringValue];
         XMPPJID *sfrom = [iq from];
         XMPPJID *sto = [iq to];
-
-        [multicastDelegate xmppJingle:self didReceiveIncommingAudioCall:ssid from:sfrom to:sto transport:candidate sdp:payload ];
+        NSString *creqI = [creq stringValue];
+        NSMutableArray * cla = [NSMutableArray arrayWithCapacity:[cels count]];
+        for (NSXMLElement *ce in cels){
+            [cla addObject:[ce attributesAsDictionary]];
+        }
+        
+        [multicastDelegate xmppJingle:self didReceiveIncommingAudioCall:ssid from:sfrom to:sto transport:candidate sdp:payload cryptoRequired:creqI cryptoElements:cla ];
 
     } else {
         // nothing we can understand...

@@ -24,23 +24,26 @@
 - (NSString *) ptypeWithPayload:(NSXMLElement *)payload;
 - (NSString *) ipWithCandidate:(NSXMLElement *) candidate;
 - (NSString *) portWithCandidate:(NSXMLElement *) candidate;
-- (void) sendSessionAccept:(NSString *)sid to:(NSString *)tos host:(NSString *)host port:(NSString *)port payload:(NSXMLElement*)payload;
+- (void) sendSessionAccept:(NSString *)sid to:(NSString *)tos host:(NSString *)host port:(NSString *)port payload:(NSXMLElement*)payload cryptos:(NSArray *) cryptos ;
+
 -(void) sendHangup:(NSString *) sid 
                 to:(NSString *) tos reason:(NSString *)reason;
 -(NSXMLElement *)emptyAudioPayload;
 -(void) addCodecToPayload:(NSXMLElement *)allAudioCodecs name:(NSString *)name rate:(NSString *)rate ptype:(NSString *)ptype;
--(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs  custom:(NSArray*)misc ;
+-(NSString *) initSessionTo:(NSString *)tos lhost:(NSString *)host lport:(NSString *)port payloads:(NSXMLElement *)codecs  custom:(NSArray*)misc
+    cryptoRequired:(NSInteger)cryptoRequired cryptoLines:(NSArray *)cryptoLines;
+
 @end
 
 @protocol XMPPJingleDelegate <NSObject>
-- (void)xmppJingle:(XMPPJingle *)sender didReceiveIncommingAudioCall:(NSString *)sid from:(XMPPJID *)from to:(XMPPJID *)to transport:(NSXMLElement *)candidate sdp:(NSXMLElement *)payload ;
+- (void)xmppJingle:(XMPPJingle *)sender didReceiveIncommingAudioCall:(NSString *)sid from:(XMPPJID *)from to:(XMPPJID *)to transport:(NSXMLElement *)candidate sdp:(NSXMLElement *)payload cryptoRequired:(NSString *) creqI cryptoElements:(NSArray *)cels;
 - (void)xmppJingle:(XMPPJingle *)sender
   didReceiveResult:(NSString *)sid ;
 - (void)xmppJingle:(XMPPJingle *)sender
    didReceiveError:(NSString *)sid error:(NSXMLElement*)error;
 - (void)xmppJingle:(XMPPJingle *)sender
    didReceiveTerminate:(NSString *)sid reason:(NSString*)reason;
-- (void)xmppJingle:(XMPPJingle *)sender didReceiveAcceptForCall:(NSString *)sid from:(XMPPJID *)from to:(XMPPJID *)to transport:(NSXMLElement *)candidate sdp:(NSXMLElement *)payload ;
+- (void)xmppJingle:(XMPPJingle *)sender didReceiveAcceptForCall:(NSString *)sid from:(XMPPJID *)from to:(XMPPJID *)to transport:(NSXMLElement *)candidate sdp:(NSXMLElement *)payload cryptoRequired:(NSString *) creqI cryptoElements:(NSArray *)cels ;
 - (void)xmppJingle:(XMPPJingle *)sender didReceiveInfoForCall:(NSString *)sid from:(XMPPJID *)from to:(XMPPJID *)to info:(NSXMLNode *)info;
 
 @optional
